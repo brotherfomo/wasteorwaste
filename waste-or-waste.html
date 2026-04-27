@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WASTE or WA$TE</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Boogaloo&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#222;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:'Press Start 2P',monospace,sans-serif}
+#game{width:680px;height:620px;position:relative;overflow:hidden;background:#5BA3E0}
+#road{position:absolute;bottom:0;left:0;width:100%;height:220px;background:#5A5A5A}
+#road-line{position:absolute;bottom:110px;left:0;width:100%;height:6px;background:#F5C518;opacity:0.6}
+#sidewalk{position:absolute;bottom:200px;left:0;width:100%;height:28px;background:#C8B89A;border-top:4px solid #A0906A;border-bottom:4px solid #A0906A}
+#curb{position:absolute;bottom:196px;left:0;width:100%;height:8px;background:#9E8C74}
+#grass{position:absolute;bottom:228px;left:0;width:100%;height:40px;background:#5CB85C;border-top:4px solid #4A9A4A}
+#sky-bg{position:absolute;top:0;left:0;width:100%;height:268px;background:#5BA3E0}
+#hud{position:absolute;top:0;left:0;width:100%;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;z-index:50;background:#1a0a00;border-bottom:4px solid #F5C518;pointer-events:none}
+.hud-val{color:#F5C518;font-size:9px;letter-spacing:1px}
+#pile-wrap{position:absolute;top:42px;left:8px;width:18px;z-index:50;pointer-events:none;display:flex;flex-direction:column;align-items:center}
+#pile-bar-bg{width:12px;height:180px;background:#1a0a00;border:2px solid #F5C518;display:flex;flex-direction:column;justify-content:flex-end}
+#pile-bar{width:100%;height:0%;background:#E24B4A;transition:height 0.3s;flex-shrink:0}
+.bin-wrap{position:absolute;bottom:58px;z-index:30;cursor:pointer;user-select:none}
+#bw-trash{left:40px}
+#bw-recycle{right:40px}
+
+/* Pile zone — mid screen where trash lands */
+#pile-zone{position:absolute;left:160px;right:160px;bottom:230px;top:100px;z-index:10;pointer-events:none}
+
+/* Items in pile — 3D stacked look */
+.pile-item{
+  position:absolute;
+  pointer-events:none;
+  transform-origin:center bottom;
+  will-change:transform,top,left;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:0px;
+}
+.pile-item .pile-emoji{
+  font-size:32px;
+  line-height:1;
+  display:block;
+  filter:drop-shadow(2px 3px 2px rgba(0,0,0,0.45));
+}
+.pile-item .pile-tag{
+  font-size:11px;
+  font-family:Arial,Helvetica,sans-serif;
+  font-weight:700;
+  color:#fff;
+  background:#1a0a00;
+  padding:2px 5px;
+  border:1.5px solid #F5C518;
+  white-space:nowrap;
+  line-height:1.3;
+  margin-top:3px;
+  border-radius:2px;
+  transform-origin:center top;
+}
+
+/* Draggable items */
+.item-sprite{
+  position:absolute;
+  z-index:40;
+  cursor:grab;
+  user-select:none;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:0px;
+}
+.item-sprite.grabbed{cursor:grabbing;z-index:90}
+.item-emoji{font-size:36px;line-height:1;display:block;filter:drop-shadow(2px 2px 0px #1a0a00)}
+.item-tag{
+  font-size:11px;
+  font-family:Arial,Helvetica,sans-serif;
+  font-weight:700;
+  color:#fff;
+  background:#1a0a00;
+  padding:3px 6px;
+  border:1.5px solid #F5C518;
+  white-space:nowrap;
+  line-height:1.3;
+  margin-top:4px;
+  border-radius:2px;
+}
+
+#truck-wrap{position:absolute;top:36px;right:-284px;z-index:20;transition:right 0.45s ease-in-out}
+#combo-pop{position:absolute;top:80px;left:50%;transform:translateX(-50%);color:#F5C518;font-size:10px;z-index:60;pointer-events:none;opacity:0;transition:opacity 0.2s;text-align:center;background:#1a0a00;padding:4px 10px;border:2px solid #F5C518;white-space:nowrap}
+.flash-ring{position:absolute;border-radius:50%;pointer-events:none;z-index:80;border:5px solid #fff;animation:ring 0.45s ease-out forwards}
+@keyframes ring{0%{transform:scale(0.4);opacity:1}100%{transform:scale(2.2);opacity:0}}
+
+/* Shadow under pile items for ground contact feel */
+.pile-shadow{
+  position:absolute;
+  border-radius:50%;
+  background:rgba(0,0,0,0.18);
+  pointer-events:none;
+  z-index:9;
+}
+
+#start-screen,#game-over{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:#1a0a00;z-index:100;gap:10px;padding:16px;
+}
+#start-screen::before{
+  content:'';
+  position:absolute;inset:0;
+  background:
+    repeating-linear-gradient(0deg,transparent,transparent 28px,rgba(245,197,24,0.04) 28px,rgba(245,197,24,0.04) 29px),
+    repeating-linear-gradient(90deg,transparent,transparent 28px,rgba(245,197,24,0.04) 28px,rgba(245,197,24,0.04) 29px);
+  pointer-events:none;
+}
+.screen-panel{
+  background:#2A1400;
+  border:3px solid #F5C518;
+  border-radius:4px;
+  padding:10px 14px;
+  width:100%;
+  max-width:580px;
+  position:relative;
+  box-shadow:4px 4px 0px #F5C518;
+}
+.screen-panel::before{
+  content:'';
+  position:absolute;
+  top:3px;left:3px;right:-3px;bottom:-3px;
+  background:#8B6000;
+  z-index:-1;
+  border-radius:4px;
+}
+.legend-wrap{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+  justify-content:center;
+  width:100%;
+}
+.leg-col-3d{
+  display:flex;flex-direction:column;gap:6px;align-items:center;
+  background:#1a0a00;
+  border:2px solid;
+  border-radius:3px;
+  padding:8px 10px;
+  position:relative;
+  flex:1;max-width:260px;
+}
+.leg-col-3d.tra{border-color:#888780;box-shadow:3px 3px 0 #444}
+.leg-col-3d.rec{border-color:#1D9E75;box-shadow:3px 3px 0 #0a4a36}
+.leg-col-3d::after{
+  content:'';
+  position:absolute;
+  right:-3px;bottom:-3px;
+  width:calc(100%);height:calc(100%);
+  z-index:-1;
+  border-radius:3px;
+}
+#start-screen h1,#game-over h1{
+  color:#F5C518;
+  font-size:42px;
+  font-family:'Boogaloo',sans-serif;
+  font-weight:400;
+  letter-spacing:3px;
+  text-align:center;
+  line-height:1.2;
+  border-bottom:3px solid #F5C518;
+  padding-bottom:10px;
+  width:100%;
+  max-width:560px;
+  text-shadow:
+    2px 2px 0 #8B6000,
+    4px 4px 0 #6B4400,
+    6px 6px 0 #4B2800,
+    8px 8px 0 #2B0E00,
+    10px 10px 12px rgba(0,0,0,0.7);
+}
+.pb-p{color:#fff;font-size:18px;font-family:'Boogaloo',sans-serif;line-height:1.6;text-align:center;max-width:440px;letter-spacing:0.5px}
+.pb-btn{background:#E24B4A;color:#fff;border:3px solid #fff;padding:12px 32px;font-size:22px;cursor:pointer;font-family:'Boogaloo',sans-serif;letter-spacing:2px;position:relative;box-shadow:3px 3px 0 #8B1A1A}
+.pb-btn:hover{background:#F5C518;color:#1a0a00;box-shadow:3px 3px 0 #8B6000}
+.pb-btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #8B1A1A}
+.leg-title{font-size:20px;padding:6px 14px;border:2px solid;font-family:'Boogaloo',sans-serif;letter-spacing:1px;border-radius:3px;width:100%;text-align:center}
+.leg-title.rec{color:#1D9E75;border-color:#1D9E75}
+.leg-title.tra{color:#A0A098;border-color:#888780}
+.leg-items{display:flex;flex-wrap:wrap;gap:5px;justify-content:center}
+.leg-item{display:flex;flex-direction:column;align-items:center;gap:2px}
+.leg-emoji{font-size:20px;line-height:1}
+.leg-name{font-size:10px;color:#ccc;font-family:Arial,Helvetica,sans-serif;font-weight:700;text-align:center}
+
+@keyframes flyIn{
+  0%  {transform:translate(var(--fx),var(--fy)) scale(0.4) rotate(var(--fr)); opacity:0}
+  60% {transform:translate(0,0) scale(1.12) rotate(calc(var(--fr)*0.3)); opacity:1}
+  80% {transform:translate(0,6px) scale(0.96) rotate(calc(var(--fr)*0.5))}
+  100%{transform:translate(0,0) scale(1) rotate(var(--land-r))}
+}
+@keyframes squish{
+  0%  {transform:scaleX(1) scaleY(1)}
+  40% {transform:scaleX(1.18) scaleY(0.78)}
+  70% {transform:scaleX(0.94) scaleY(1.06)}
+  100%{transform:scaleX(1) scaleY(1)}
+}
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="sky-bg">
+    <!-- 3D cloud 1 (left) -->
+    <svg style="position:absolute;top:18px;left:44px" width="110" height="54" viewBox="0 0 110 54">
+      <!-- shadow face (bottom/side) -->
+      <ellipse cx="55" cy="46" rx="46" ry="10" fill="#B8D4E8" opacity="0.7"/>
+      <!-- main body top face -->
+      <ellipse cx="55" cy="32" rx="46" ry="18" fill="#fff"/>
+      <ellipse cx="36" cy="26" rx="28" ry="22" fill="#fff"/>
+      <ellipse cx="68" cy="22" rx="24" ry="24" fill="#fff"/>
+      <ellipse cx="50" cy="18" rx="20" ry="18" fill="#fff"/>
+      <!-- highlight -->
+      <ellipse cx="44" cy="14" rx="12" ry="8" fill="#fff" opacity="0.85"/>
+      <!-- underside shadow -->
+      <ellipse cx="55" cy="40" rx="42" ry="8" fill="#C8DCF0" opacity="0.6"/>
+      <!-- right side face for depth -->
+      <ellipse cx="94" cy="34" rx="12" ry="14" fill="#D4E8F8"/>
+      <ellipse cx="94" cy="34" rx="8" ry="10" fill="#fff" opacity="0.5"/>
+    </svg>
+
+    <!-- 3D cloud 2 (centre-left) -->
+    <svg style="position:absolute;top:48px;left:270px" width="130" height="58" viewBox="0 0 130 58">
+      <ellipse cx="65" cy="50" rx="54" ry="10" fill="#B8D4E8" opacity="0.65"/>
+      <ellipse cx="65" cy="36" rx="54" ry="19" fill="#fff"/>
+      <ellipse cx="44" cy="30" rx="32" ry="24" fill="#fff"/>
+      <ellipse cx="80" cy="25" rx="28" ry="26" fill="#fff"/>
+      <ellipse cx="60" cy="20" rx="22" ry="20" fill="#fff"/>
+      <ellipse cx="52" cy="15" rx="14" ry="9" fill="#fff" opacity="0.85"/>
+      <ellipse cx="65" cy="43" rx="50" ry="9" fill="#C8DCF0" opacity="0.55"/>
+      <ellipse cx="112" cy="38" rx="14" ry="16" fill="#D4E8F8"/>
+      <ellipse cx="112" cy="38" rx="9" ry="11" fill="#fff" opacity="0.5"/>
+    </svg>
+
+    <!-- 3D cloud 3 (right) -->
+    <svg style="position:absolute;top:22px;left:520px" width="120" height="56" viewBox="0 0 120 56">
+      <ellipse cx="60" cy="48" rx="50" ry="10" fill="#B8D4E8" opacity="0.65"/>
+      <ellipse cx="60" cy="34" rx="50" ry="18" fill="#fff"/>
+      <ellipse cx="40" cy="28" rx="30" ry="23" fill="#fff"/>
+      <ellipse cx="74" cy="23" rx="26" ry="25" fill="#fff"/>
+      <ellipse cx="56" cy="18" rx="20" ry="19" fill="#fff"/>
+      <ellipse cx="48" cy="13" rx="13" ry="8" fill="#fff" opacity="0.85"/>
+      <ellipse cx="60" cy="41" rx="46" ry="8" fill="#C8DCF0" opacity="0.55"/>
+      <ellipse cx="104" cy="36" rx="13" ry="15" fill="#D4E8F8"/>
+      <ellipse cx="104" cy="36" rx="8" ry="10" fill="#fff" opacity="0.5"/>
+    </svg>
+  </div>
+  <div id="grass"></div>
+  <div id="sidewalk"></div>
+  <div id="curb"></div>
+  <div id="road"></div>
+  <div id="road-line"></div>
+
+  <div id="hud">
+    <div class="hud-val" id="score-display">SCORE 0</div>
+    <div class="hud-val" id="level-display">LVL 1</div>
+    <div class="hud-val" id="lives-display">LIVES ♥♥♥</div>
+  </div>
+  <div id="pile-wrap">
+    <div id="pile-bar-bg"><div id="pile-bar"></div></div>
+  </div>
+  <div id="combo-pop"></div>
+  <div id="pile-zone"></div>
+
+  <div id="truck-wrap">
+    <svg width="284" height="112" viewBox="0 0 284 112">
+      <!-- ground shadow -->
+      <ellipse cx="140" cy="108" rx="130" ry="5" fill="#00000033"/>
+
+      <!-- ── CARGO BOX ── -->
+      <!-- top face -->
+      <polygon points="72,14 262,14 272,4 82,4" fill="#E8724E" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- front face -->
+      <polygon points="72,14 262,14 262,76 72,76" fill="#D85A30" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- right side face -->
+      <polygon points="262,14 272,4 272,66 262,76" fill="#A83E1C" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- inner panel recess -->
+      <polygon points="80,22 254,22 254,72 80,72" fill="#BA4020" stroke="#1a0a00" stroke-width="1.5"/>
+      <!-- highlight strip top -->
+      <line x1="80" y1="22" x2="254" y2="22" stroke="#F09070" stroke-width="2" opacity="0.55"/>
+      <!-- shadow strip bottom -->
+      <line x1="80" y1="72" x2="254" y2="72" stroke="#7A2A0C" stroke-width="2" opacity="0.5"/>
+      <!-- SACRED WASTE lettering -->
+      <text x="167" y="46" fill="#F5C518" font-size="13" font-family="'Press Start 2P',monospace" text-anchor="middle" font-weight="bold">SACRED</text>
+      <text x="167" y="63" fill="#fff"    font-size="12" font-family="'Press Start 2P',monospace" text-anchor="middle">WASTE</text>
+
+      <!-- ── CAB ── -->
+      <!-- top face -->
+      <polygon points="4,22 72,22 82,12 14,12" fill="#FAC870" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- front face -->
+      <polygon points="4,22 72,22 72,80 4,80" fill="#EF9F27" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- right side face joining cargo -->
+      <polygon points="72,22 82,12 82,70 72,80" fill="#C07010" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+
+      <!-- windshield -->
+      <polygon points="10,28 64,28 64,52 10,52" fill="#85B7EB" stroke="#1a0a00" stroke-width="1.5" stroke-linejoin="round"/>
+      <!-- windshield shine -->
+      <polygon points="12,30 33,30 33,50 12,50" fill="#C5DEFA" opacity="0.45"/>
+      <!-- windshield centre bar -->
+      <line x1="10" y1="40" x2="64" y2="40" stroke="#1a0a00" stroke-width="1.5"/>
+
+      <!-- side window -->
+      <polygon points="10,55 56,55 56,70 10,70" fill="#85B7EB" stroke="#1a0a00" stroke-width="1.5"/>
+      <polygon points="12,57 30,57 30,68 12,68" fill="#C5DEFA" opacity="0.35"/>
+
+      <!-- headlight -->
+      <rect x="4" y="64" width="12" height="9" rx="2" fill="#FAF0A0" stroke="#1a0a00" stroke-width="1.5"/>
+      <rect x="5" y="65" width="5" height="4" fill="#fff" opacity="0.7"/>
+
+      <!-- grille -->
+      <rect x="4" y="74" width="28" height="6" rx="1" fill="#7A5010" stroke="#1a0a00" stroke-width="1"/>
+      <line x1="13" y1="74" x2="13" y2="80" stroke="#1a0a00" stroke-width="1"/>
+      <line x1="21" y1="74" x2="21" y2="80" stroke="#1a0a00" stroke-width="1"/>
+
+      <!-- chassis underbar -->
+      <polygon points="4,80 262,80 272,70 14,70" fill="#8B3010" stroke="#1a0a00" stroke-width="1.5"/>
+
+      <!-- ── WHEELS ── front -->
+      <!-- tyre side -->
+      <ellipse cx="44" cy="90" rx="16" ry="16" fill="#2C2C2A" stroke="#1a0a00" stroke-width="2.5"/>
+      <ellipse cx="44" cy="90" rx="10" ry="10" fill="#555450"/>
+      <ellipse cx="44" cy="90" rx="4"  ry="4"  fill="#888780"/>
+      <!-- tyre top (isometric disc) -->
+      <ellipse cx="48" cy="85" rx="16" ry="5" fill="#444440" stroke="#1a0a00" stroke-width="1.5"/>
+
+      <!-- rear wheel -->
+      <ellipse cx="214" cy="90" rx="16" ry="16" fill="#2C2C2A" stroke="#1a0a00" stroke-width="2.5"/>
+      <ellipse cx="214" cy="90" rx="10" ry="10" fill="#555450"/>
+      <ellipse cx="214" cy="90" rx="4"  ry="4"  fill="#888780"/>
+      <ellipse cx="218" cy="85" rx="16" ry="5" fill="#444440" stroke="#1a0a00" stroke-width="1.5"/>
+
+      <!-- exhaust stack -->
+      <rect x="264" y="10" width="7" height="26" rx="3" fill="#555450" stroke="#1a0a00" stroke-width="1.5"/>
+      <ellipse cx="267" cy="10" rx="3.5" ry="2" fill="#777770"/>
+      <!-- smoke -->
+      <circle cx="267" cy="5"  r="4.5" fill="#ddd" opacity="0.3"/>
+      <circle cx="271" cy="1"  r="3"   fill="#ddd" opacity="0.18"/>
+    </svg>
+  </div>
+
+  <!-- TRASH bin left -->
+  <div class="bin-wrap" id="bw-trash">
+    <svg width="100" height="130" viewBox="0 0 100 130">
+      <!-- ground shadow -->
+      <ellipse cx="52" cy="126" rx="38" ry="5" fill="#00000030"/>
+
+      <!-- ── BIN BODY ── -->
+      <!-- right side face (dark) -->
+      <polygon points="78,36 90,26 90,108 78,118" fill="#3E3E3C" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- front face -->
+      <polygon points="10,36 78,36 78,118 10,118" fill="#888780" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- front face highlight (left edge shine) -->
+      <polygon points="10,36 18,36 18,118 10,118" fill="#A0A098" opacity="0.5"/>
+      <!-- vertical ribbing lines on front -->
+      <line x1="30" y1="40" x2="30" y2="114" stroke="#6A6A64" stroke-width="1.5" opacity="0.7"/>
+      <line x1="50" y1="40" x2="50" y2="114" stroke="#6A6A64" stroke-width="1.5" opacity="0.7"/>
+      <line x1="70" y1="40" x2="70" y2="114" stroke="#6A6A64" stroke-width="1.5" opacity="0.7"/>
+      <!-- shadow strip bottom -->
+      <line x1="10" y1="114" x2="78" y2="114" stroke="#2C2C2A" stroke-width="2" opacity="0.4"/>
+
+      <!-- label plate -->
+      <rect x="18" y="72" width="52" height="22" rx="2" fill="#5F5E5A" stroke="#3E3E3C" stroke-width="1"/>
+      <text x="44" y="87" fill="#D3D1C7" font-size="7" font-family="'Press Start 2P',monospace" text-anchor="middle">TRASH</text>
+
+      <!-- bin icon area -->
+      <text x="44" y="68" fill="#fff" font-size="18" font-family="sans-serif" text-anchor="middle">🗑</text>
+
+      <!-- ── LID ── -->
+      <!-- lid right side face -->
+      <polygon points="78,24 90,14 90,26 78,36" fill="#3E3E3C" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- lid front face -->
+      <polygon points="6,24 78,24 78,36 6,36" fill="#6A6A64" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- lid top face -->
+      <polygon points="6,24 78,24 90,14 18,14" fill="#888780" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- lid top highlight -->
+      <polygon points="8,22 40,22 50,13 18,13" fill="#A0A098" opacity="0.4"/>
+
+      <!-- ── HANDLE ── -->
+      <polygon points="36,12 56,12 58,18 34,18" fill="#5F5E5A" stroke="#1a0a00" stroke-width="1.5" stroke-linejoin="round"/>
+      <!-- handle top -->
+      <polygon points="36,12 56,12 60,8 40,8" fill="#888780" stroke="#1a0a00" stroke-width="1.5" stroke-linejoin="round"/>
+    </svg>
+  </div>
+
+  <!-- RECYCLE bin right -->
+  <div class="bin-wrap" id="bw-recycle">
+    <svg width="100" height="130" viewBox="0 0 100 130">
+      <!-- ground shadow -->
+      <ellipse cx="52" cy="126" rx="38" ry="5" fill="#00000030"/>
+
+      <!-- ── BIN BODY ── -->
+      <!-- right side face (dark) -->
+      <polygon points="78,36 90,26 90,108 78,118" fill="#085041" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- front face -->
+      <polygon points="10,36 78,36 78,118 10,118" fill="#1D9E75" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- front face highlight left edge -->
+      <polygon points="10,36 18,36 18,118 10,118" fill="#5DCAA5" opacity="0.4"/>
+      <!-- vertical centre divider -->
+      <line x1="44" y1="40" x2="44" y2="114" stroke="#0F6E56" stroke-width="1.5" opacity="0.7"/>
+      <!-- shadow strip bottom -->
+      <line x1="10" y1="114" x2="78" y2="114" stroke="#04342C" stroke-width="2" opacity="0.4"/>
+
+      <!-- label plate -->
+      <rect x="14" y="72" width="57" height="22" rx="2" fill="#0F6E56" stroke="#085041" stroke-width="1"/>
+      <text x="42" y="87" fill="#9FE1CB" font-size="5.5" font-family="'Press Start 2P',monospace" text-anchor="middle">RECYCLE</text>
+
+      <!-- recycling symbol -->
+      <text x="44" y="68" fill="#fff" font-size="20" font-family="sans-serif" text-anchor="middle">♻</text>
+
+      <!-- ── LID ── -->
+      <!-- lid right side face -->
+      <polygon points="78,24 90,14 90,26 78,36" fill="#085041" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- lid front face -->
+      <polygon points="6,24 78,24 78,36 6,36" fill="#0F6E56" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- lid top face -->
+      <polygon points="6,24 78,24 90,14 18,14" fill="#1D9E75" stroke="#1a0a00" stroke-width="2" stroke-linejoin="round"/>
+      <!-- lid top highlight -->
+      <polygon points="8,22 40,22 50,13 18,13" fill="#5DCAA5" opacity="0.35"/>
+
+      <!-- ── HANDLE ── -->
+      <polygon points="36,12 56,12 58,18 34,18" fill="#0F6E56" stroke="#1a0a00" stroke-width="1.5" stroke-linejoin="round"/>
+      <!-- handle top -->
+      <polygon points="36,12 56,12 60,8 40,8" fill="#1D9E75" stroke="#1a0a00" stroke-width="1.5" stroke-linejoin="round"/>
+    </svg>
+  </div>
+
+  <div id="start-screen">
+    <h1>WASTE or WA$TE?</h1>
+    <div class="pb-p">DRAG ITEMS TO THE CORRECT BIN BEFORE THE PILE BURIES YOU!</div>
+    <div class="screen-panel">
+      <div class="legend-wrap">
+        <div class="leg-col-3d tra">
+          <div class="leg-title tra">🗑 TRASH</div>
+          <div class="leg-items" id="leg-trash"></div>
+        </div>
+        <div class="leg-col-3d rec">
+          <div class="leg-title rec">♻ RECYCLE</div>
+          <div class="leg-items" id="leg-recycle"></div>
+        </div>
+      </div>
+    </div>
+    <button class="pb-btn" id="start-btn">► PLAY</button>
+  </div>
+  <div id="game-over" style="display:none">
+    <h1 id="go-title">BURIED!!</h1>
+    <div class="pb-p" id="go-msg">SCORE: 0</div>
+    <button class="pb-btn" id="restart-btn">► RETRY</button>
+  </div>
+</div>
+
+<script>
+// ── AUDIO ─────────────────────────────────────────────────────────────────────
+let actx=null;
+function getCtx(){if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();if(actx.state==='suspended')actx.resume();return actx;}
+function playSeq(notes){const ctx=getCtx();let t=ctx.currentTime;notes.forEach(n=>{const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type=n.type||'square';o.frequency.setValueAtTime(n.freq,t);if(n.slide)o.frequency.linearRampToValueAtTime(n.slide,t+n.dur);g.gain.setValueAtTime(n.vol||0.18,t);g.gain.exponentialRampToValueAtTime(0.0001,t+n.dur);o.start(t);o.stop(t+n.dur+0.01);t+=n.dur;});}
+function playNoise(dur,vol,ff,delay){setTimeout(()=>{const ctx=getCtx(),sz=Math.floor(ctx.sampleRate*dur),buf=ctx.createBuffer(1,sz,ctx.sampleRate),d=buf.getChannelData(0);for(let i=0;i<sz;i++)d[i]=Math.random()*2-1;const s=ctx.createBufferSource();s.buffer=buf;const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=ff||800;const g=ctx.createGain();g.gain.setValueAtTime(vol||0.2,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+dur);s.connect(f);f.connect(g);g.connect(ctx.destination);s.start();s.stop(ctx.currentTime+dur+0.01);},delay||0);}
+
+function sfxTruck(){const ctx=getCtx(),t=ctx.currentTime;const r=ctx.createOscillator(),rg=ctx.createGain();r.type='triangle';r.frequency.setValueAtTime(68,t);rg.gain.setValueAtTime(0.0001,t);rg.gain.linearRampToValueAtTime(0.06,t+0.12);rg.gain.setValueAtTime(0.06,t+0.75);rg.gain.linearRampToValueAtTime(0.0001,t+1.0);r.connect(rg);rg.connect(ctx.destination);r.start(t);r.stop(t+1.05);for(let i=0;i<3;i++){const off=i*0.38,b=ctx.createOscillator(),bg=ctx.createGain();b.type='sine';b.frequency.setValueAtTime(440,t+off);bg.gain.setValueAtTime(0.0001,t+off);bg.gain.linearRampToValueAtTime(0.13,t+off+0.012);bg.gain.setValueAtTime(0.13,t+off+0.09);bg.gain.linearRampToValueAtTime(0.0001,t+off+0.10);b.connect(bg);bg.connect(ctx.destination);b.start(t+off);b.stop(t+off+0.12);}playNoise(0.10,0.07,400,900);}
+function sfxCorrect(){playSeq([{freq:523,dur:0.07,type:'square',vol:0.17},{freq:659,dur:0.07,type:'square',vol:0.17},{freq:784,dur:0.13,type:'square',vol:0.20}]);}
+function sfxCombo(){playSeq([{freq:523,dur:0.06,type:'square',vol:0.17},{freq:659,dur:0.06,type:'square',vol:0.17},{freq:784,dur:0.06,type:'square',vol:0.17},{freq:1047,dur:0.15,type:'square',vol:0.22}]);}
+function sfxDegen(){
+  // Coin-like shimmer: quick ascending arpeggio then a glittery trill
+  playSeq([
+    {freq:659, dur:0.05,type:'square',vol:0.18},
+    {freq:784, dur:0.05,type:'square',vol:0.18},
+    {freq:1047,dur:0.05,type:'square',vol:0.20},
+    {freq:1319,dur:0.05,type:'square',vol:0.22},
+    {freq:1047,dur:0.04,type:'square',vol:0.18},
+    {freq:1319,dur:0.04,type:'square',vol:0.18},
+    {freq:1568,dur:0.14,type:'square',vol:0.24},
+  ]);
+}
+function sfxWrong(){playSeq([{freq:220,dur:0.08,type:'square',vol:0.22},{freq:175,dur:0.08,type:'square',vol:0.22},{freq:140,dur:0.14,type:'square',vol:0.25}]);playNoise(0.18,0.11,450);}
+function sfxLoseLife(){playNoise(0.22,0.28,550);setTimeout(()=>playSeq([{freq:440,dur:0.07,type:'square',vol:0.20},{freq:330,dur:0.07,type:'square',vol:0.20},{freq:220,dur:0.07,type:'square',vol:0.20},{freq:147,dur:0.22,type:'square',vol:0.25,slide:75}]),60);}
+function sfxLevelUp(){playSeq([{freq:392,dur:0.08,type:'square',vol:0.17},{freq:523,dur:0.08,type:'square',vol:0.17},{freq:659,dur:0.08,type:'square',vol:0.17},{freq:784,dur:0.08,type:'square',vol:0.17},{freq:1047,dur:0.22,type:'square',vol:0.22}]);}
+function sfxGameOver(){playSeq([{freq:392,dur:0.13,type:'square',vol:0.20},{freq:370,dur:0.13,type:'square',vol:0.20},{freq:349,dur:0.13,type:'square',vol:0.20},{freq:294,dur:0.38,type:'square',vol:0.25,slide:185}]);playNoise(0.45,0.20,380,220);}
+function sfxPickup(){playSeq([{freq:480,dur:0.05,type:'square',vol:0.10}]);}
+function sfxStart(){playSeq([{freq:330,dur:0.07,type:'square',vol:0.15},{freq:392,dur:0.07,type:'square',vol:0.15},{freq:523,dur:0.07,type:'square',vol:0.15},{freq:659,dur:0.14,type:'square',vol:0.18}]);}
+
+// ── ITEMS ─────────────────────────────────────────────────────────────────────
+const ITEMS=[
+  {r:true, e:'🍶', label:'Sake Bottle'},
+  {r:true, e:'🥤', label:'Plastic Cup'},
+  {r:true, e:'📰', label:'Newspaper'},
+  {r:true, e:'📦', label:'Cardboard'},
+  {r:true, e:'🥫', label:'Tin Can'},
+  {r:true, e:'🍾', label:'Wine Bottle'},
+  {r:true, e:'📄', label:'Paper'},
+  {r:true, e:'🫙', label:'Glass Jar'},
+  {r:true, e:'🖼️', label:'NFT',      degen:true},
+  {r:true, e:'🪙', label:'Memecoin', degen:true},
+  {r:false,e:'🍌', label:'Banana Peel'},
+  {r:false,e:'🍕', label:'Pizza Crust'},
+  {r:false,e:'🚬', label:'Cigarette'},
+  {r:false,e:'🩺', label:'Med Waste'},
+  {r:false,e:'🩹', label:'Bandage'},
+  {r:false,e:'🍗', label:'Chicken Bone'},
+  {r:false,e:'🥛', label:'Used Cup'},
+  {r:false,e:'🧦', label:'Old Sock'},
+  {r:false,e:'🧤', label:'Dirty Glove'},
+];
+
+const game=document.getElementById('game');
+const truck=document.getElementById('truck-wrap');
+const scoreEl=document.getElementById('score-display');
+const levelEl=document.getElementById('level-display');
+const livesEl=document.getElementById('lives-display');
+const pileBar=document.getElementById('pile-bar');
+const comboEl=document.getElementById('combo-pop');
+const startScreen=document.getElementById('start-screen');
+const gameOverScreen=document.getElementById('game-over');
+const goTitle=document.getElementById('go-title');
+const goMsg=document.getElementById('go-msg');
+const pileZone=document.getElementById('pile-zone');
+
+ITEMS.forEach(it=>{
+  const d=document.createElement('div');d.className='leg-item';
+  d.innerHTML='<span class="leg-emoji">'+it.e+'</span><span class="leg-name">'+it.label+'</span>';
+  document.getElementById(it.r?'leg-recycle':'leg-trash').appendChild(d);
+});
+
+let items=[],pileItems=[],score=0,lives=3,level=1,pileLevel=0;
+let spawnTimer=null,pileTimer=null,combo=0,comboTimer=null;
+let running=false,dragging=null,dragOffX=0,dragOffY=0;
+
+// ── PILE PHYSICS ──────────────────────────────────────────────────────────────
+// We track a virtual 3D pile using a grid of "slots" with height offsets
+// Each item lands at a random x in the pile zone, settles to the highest
+// occupied point in that column, gets a random rotation and slight scale
+// to fake perspective (items higher up = slightly smaller = farther back)
+
+const PILE_COLS = 7;
+const PILE_ZONE_W = 360; // px width of pile zone (game width minus bins)
+const PILE_ZONE_H = 320; // vertical space
+const COL_W = PILE_ZONE_W / PILE_COLS;
+
+// colHeights[i] = how many items are stacked in that column (0-based)
+let colHeights = new Array(PILE_COLS).fill(0);
+// max stack per column before it "overflows" the pile zone
+const MAX_STACK = 5;
+
+// Pile zone sits from y=100 to y=420 in game coords, x=160 to x=520
+const PILE_X_OFFSET = 160;
+const PILE_Y_BOTTOM = 390; // base y in game coords where pile starts
+const ITEM_H = 50; // vertical spacing per item in stack
+
+function addToPile(emoji, label) {
+  // Pick a random column, weighted toward center for more realistic mound shape
+  // If a column is full, pick the least full
+  let col;
+  const weights=[1,2,3,4,3,2,1];
+  const totalW=weights.reduce((a,b)=>a+b,0);
+  let rand=Math.random()*totalW, cumul=0;
+  col=PILE_COLS-1;
+  for(let i=0;i<PILE_COLS;i++){cumul+=weights[i];if(rand<=cumul){col=i;break;}}
+  // If that column is maxed, find least-full column
+  if(colHeights[col]>=MAX_STACK){
+    let minH=Infinity,minC=0;
+    for(let i=0;i<PILE_COLS;i++){if(colHeights[i]<minH){minH=colHeights[i];minC=i;}}
+    col=minC;
+  }
+
+  const stackHeight=colHeights[col];
+  colHeights[col]++;
+
+  // x position: column center + small jitter
+  const jitter=(Math.random()-0.5)*COL_W*0.6;
+  const gameX=PILE_X_OFFSET+col*COL_W+COL_W/2+jitter;
+
+  // y position: items higher in stack = higher up screen
+  // Also fake perspective: higher items (farther back) are slightly higher on screen
+  const perspectiveRaise=stackHeight*4; // items further back raised slightly more
+  const gameY=PILE_Y_BOTTOM - stackHeight*ITEM_H - perspectiveRaise;
+
+  // Scale: items farther back (higher in pile) are slightly smaller
+  const scale=1.0-stackHeight*0.06;
+  const clampedScale=Math.max(0.6,scale);
+
+  // Random rotation: more rotation for items not at base
+  const maxRot=stackHeight===0?12:22;
+  const rot=(Math.random()-0.5)*maxRot;
+
+  // z-index: items higher in pile (closer to viewer at bottom) get higher z
+  // But items at back (high stack) should appear behind front items
+  // We invert: lower stack = higher z (in front)
+  const zIndex=20+stackHeight;
+
+  // Shadow size shrinks for items higher up (perspective)
+  const shadowW=Math.max(18,36-stackHeight*4);
+  const shadowH=Math.max(6,12-stackHeight*2);
+
+  // Fly-in animation: item comes from truck (right side, top area)
+  const startX=520-gameX; // offset from landing spot
+  const startY=60-gameY;
+
+  const el=document.createElement('div');
+  el.className='pile-item';
+  el.innerHTML='<span class="pile-emoji">'+emoji+'</span><span class="pile-tag">'+label+'</span>';
+  el.style.left=gameX+'px';
+  el.style.top=gameY+'px';
+  el.style.zIndex=zIndex;
+  el.style.fontSize=(32*clampedScale)+'px';
+  el.style.setProperty('--fx',startX+'px');
+  el.style.setProperty('--fy',startY+'px');
+  el.style.setProperty('--fr',(rot*2)+'deg');
+  el.style.setProperty('--land-r',rot+'deg');
+  el.style.transform=`rotate(${rot}deg) scale(${clampedScale})`;
+  el.style.animation='flyIn 0.55s cubic-bezier(0.22,1,0.36,1) forwards';
+
+  // Add ground shadow
+  const shadow=document.createElement('div');
+  shadow.className='pile-shadow';
+  shadow.style.left=(gameX-shadowW/2)+'px';
+  shadow.style.top=(gameY+26*clampedScale)+'px';
+  shadow.style.width=shadowW+'px';
+  shadow.style.height=shadowH+'px';
+  shadow.style.opacity=Math.max(0.05,0.22-stackHeight*0.03);
+
+  game.appendChild(shadow);
+  game.appendChild(el);
+  pileItems.push({el,shadow,gameX,gameY,col});
+
+  // After landing, add squish to element below if exists
+  if(stackHeight>0){
+    const below=pileItems.filter(p=>p.col===col);
+    if(below.length>1){
+      const belowEl=below[below.length-2].el;
+      belowEl.style.animation='squish 0.25s ease-out forwards';
+    }
+  }
+}
+
+function clearPileVisuals(){
+  pileItems.forEach(p=>{p.el&&p.el.remove();p.shadow&&p.shadow.remove();});
+  pileItems=[];
+  colHeights=new Array(PILE_COLS).fill(0);
+}
+
+// ── DRAGGABLE SPAWN ───────────────────────────────────────────────────────────
+function spawnDraggable(data,pileEl){
+  // Create a draggable copy at the pile item's position
+  const rect=pileEl.getBoundingClientRect();
+  const gameRect=game.getBoundingClientRect();
+  const x=rect.left-gameRect.left;
+  const y=rect.top-gameRect.top;
+
+  const el=document.createElement('div');
+  el.className='item-sprite';
+  el.innerHTML='<span class="item-emoji">'+data.e+'</span><span class="item-tag">'+data.label+'</span>';
+  el.style.left=x+'px';
+  el.style.top=y+'px';
+  el.style.zIndex=85;
+  game.appendChild(el);
+
+  const item={el,r:data.r,pileRef:pileEl};
+  items.push(item);
+  el.addEventListener('mousedown',e=>startDrag(e,item));
+  el.addEventListener('touchstart',e=>startDrag(e,item),{passive:false});
+  return item;
+}
+
+// ── GAME LOOP ─────────────────────────────────────────────────────────────────
+function startGame(){
+  items.forEach(i=>i.el&&i.el.remove());
+  items=[];
+  clearPileVisuals();
+  score=0;lives=3;level=1;pileLevel=0;combo=0;running=true;
+  document.querySelectorAll('.flash-ring').forEach(e=>e.remove());
+  updateHUD();
+  startScreen.style.display='none';
+  gameOverScreen.style.display='none';
+  sfxStart();
+  scheduleSpawn();
+  schedulePile();
+}
+
+function scheduleSpawn(){
+  if(!running)return;
+  const delay=Math.max(500,1500-level*110);
+  spawnTimer=setTimeout(()=>{spawnItem();scheduleSpawn();},delay);
+}
+
+function schedulePile(){
+  if(!running)return;
+  pileTimer=setInterval(()=>{
+    if(!running)return;
+    pileLevel+=1.5+level*0.5;
+    if(pileLevel>=100)endGame();
+    updateHUD();
+  },600);
+}
+
+function spawnItem(){
+  if(!running)return;
+  const data=ITEMS[Math.floor(Math.random()*ITEMS.length)];
+
+  // Add to visual pile
+  addToPile(data.e, data.label);
+
+  // After fly-in animation, make it draggable
+  const pileEntry=pileItems[pileItems.length-1];
+  setTimeout(()=>{
+    if(!running)return;
+    // Attach drag handlers to the pile item itself
+    const item={el:pileEntry.el,shadow:pileEntry.shadow,r:data.r,degen:!!data.degen,inPile:true,pileIdx:pileItems.indexOf(pileEntry)};
+    items.push(item);
+
+    pileEntry.el.style.cursor='grab';
+    pileEntry.el.style.pointerEvents='all';
+    pileEntry.el.style.zIndex=50+pileItems.length;
+
+    pileEntry.el.addEventListener('mousedown',e=>startDragPile(e,item,pileEntry));
+    pileEntry.el.addEventListener('touchstart',e=>startDragPile(e,item,pileEntry),{passive:false});
+  },600);
+
+  sfxTruck();
+  animateTruck();
+}
+
+function animateTruck(){
+  truck.style.transition='right 0.45s ease-in';
+  truck.style.right='0px';
+  setTimeout(()=>{
+    truck.style.transition='right 0.65s ease-out';
+    truck.style.right='-284px';
+  },700);
+}
+
+function startDragPile(e,item,pileEntry){
+  e.preventDefault();
+  dragging=item;
+
+  // Remove from pile visually - shrink shadow
+  if(pileEntry.shadow)pileEntry.shadow.style.opacity='0';
+  colHeights[pileEntry.col]=Math.max(0,colHeights[pileEntry.col]-1);
+
+  // Switch to free-floating draggable
+  item.el.style.cursor='grabbing';
+  item.el.style.zIndex=90;
+  const emojiSpan=item.el.querySelector('.pile-emoji');
+  if(emojiSpan)emojiSpan.style.fontSize='36px';
+  item.el.style.filter='drop-shadow(2px 2px 0px #1a0a00)';
+  // Reset transform so it drags cleanly
+  item.el.style.animation='none';
+  item.el.style.transform='none';
+
+  sfxPickup();
+  const rect=item.el.getBoundingClientRect();
+  const cx=e.touches?e.touches[0].clientX:e.clientX;
+  const cy=e.touches?e.touches[0].clientY:e.clientY;
+  dragOffX=cx-rect.left;
+  dragOffY=cy-rect.top;
+}
+
+function startDrag(e,item){
+  e.preventDefault();
+  dragging=item;
+  item.el.classList.add('grabbed');
+  sfxPickup();
+  const rect=item.el.getBoundingClientRect();
+  const cx=e.touches?e.touches[0].clientX:e.clientX;
+  const cy=e.touches?e.touches[0].clientY:e.clientY;
+  dragOffX=cx-rect.left;
+  dragOffY=cy-rect.top;
+}
+
+document.addEventListener('mousemove',onMove);
+document.addEventListener('touchmove',onMove,{passive:false});
+function onMove(e){
+  if(!dragging)return;
+  e.preventDefault();
+  const gr=game.getBoundingClientRect();
+  const cx=e.touches?e.touches[0].clientX:e.clientX;
+  const cy=e.touches?e.touches[0].clientY:e.clientY;
+  dragging.el.style.left=(cx-gr.left-dragOffX)+'px';
+  dragging.el.style.top=(cy-gr.top-dragOffY)+'px';
+}
+
+document.addEventListener('mouseup',onDrop);
+document.addEventListener('touchend',onDrop);
+function onDrop(){
+  if(!dragging)return;
+  const item=dragging;dragging=null;
+  item.el.classList.remove('grabbed');
+  item.el.style.cursor='grab';
+  const rect=item.el.getBoundingClientRect();
+  const cx=rect.left+20,cy=rect.top+20;
+  const rr=document.getElementById('bw-recycle').getBoundingClientRect();
+  const tr=document.getElementById('bw-trash').getBoundingClientRect();
+  const inR=cx>=rr.left&&cx<=rr.right&&cy>=rr.top&&cy<=rr.bottom;
+  const inT=cx>=tr.left&&cx<=tr.right&&cy>=tr.top&&cy<=tr.bottom;
+  if(inR||inT){
+    resolveSort(item,(inR&&item.r)||(inT&&!item.r),inR?rr:tr);
+  } else {
+    // Drop back — re-add to pile
+    item.el.style.zIndex=30;
+    const es=item.el.querySelector('.pile-emoji');
+    if(es)es.style.fontSize='32px';
+    item.el.style.filter='drop-shadow(2px 3px 2px rgba(0,0,0,0.45))';
+    if(item.shadow)item.shadow.style.opacity='0.18';
+  }
+}
+
+function resolveSort(item,correct,binRect){
+  const idx=items.indexOf(item);
+  if(idx>-1)items.splice(idx,1);
+  if(item.shadow)item.shadow.remove();
+  item.el.remove();
+
+  if(correct){
+    combo++;
+    const comboMult=(combo>=3?3:combo>=2?2:1);
+    const basePts=10*comboMult;
+
+    if(item.degen){
+      // Degen Double: double points, special fanfare, reset combo so it doesn't stack weird
+      const pts=basePts*2;
+      score+=pts;
+      pileLevel=Math.max(0,pileLevel-12);
+      sfxDegen();
+      showDegen(pts);
+      flash(binRect,'#F5C518');
+    } else {
+      const pts=basePts;
+      score+=pts;
+      pileLevel=Math.max(0,pileLevel-8);
+      if(combo>=2){sfxCombo();showCombo(combo,pts);}
+      else sfxCorrect();
+      flash(binRect,'#1D9E75');
+    }
+    if(score>level*130)levelUp();
+  }else{
+    combo=0;lives--;
+    pileLevel=Math.min(100,pileLevel+16);
+    flash(binRect,'#E24B4A');
+    sfxWrong();
+    if(lives<=0)endGame();
+    else sfxLoseLife();
+  }
+  updateHUD();
+}
+
+function flash(r,col){
+  const f=document.createElement('div');f.className='flash-ring';
+  const gr=game.getBoundingClientRect();
+  f.style.cssText='left:'+(r.left+r.width/2-gr.left-30)+'px;top:'+(r.top+r.height/2-gr.top-30)+'px;width:60px;height:60px;border-color:'+col;
+  game.appendChild(f);setTimeout(()=>f.remove(),500);
+}
+
+function showCombo(c,pts){
+  clearTimeout(comboTimer);
+  comboEl.textContent=c>=5?'INSANE x'+c+'! +'+pts:c>=3?'HOT x'+c+'! +'+pts:'COMBO x'+c+'! +'+pts;
+  comboEl.style.color='#F5C518';
+  comboEl.style.borderColor='#F5C518';
+  comboEl.style.opacity=1;
+  comboTimer=setTimeout(()=>comboEl.style.opacity=0,1300);
+}
+function showDegen(pts){
+  clearTimeout(comboTimer);
+  comboEl.textContent='🪙 DEGEN DOUBLE! +'+pts;
+  comboEl.style.color='#FFD700';
+  comboEl.style.borderColor='#FFD700';
+  comboEl.style.opacity=1;
+  comboTimer=setTimeout(()=>comboEl.style.opacity=0,1800);
+}
+
+function levelUp(){level++;pileLevel=Math.max(0,pileLevel-20);sfxLevelUp();}
+
+function updateHUD(){
+  scoreEl.textContent='SCORE '+score;
+  levelEl.textContent='LVL '+level;
+  livesEl.textContent='LIVES '+('♥'.repeat(Math.max(0,lives))+'♡'.repeat(Math.max(0,3-lives)));
+  pileBar.style.height=Math.min(100,pileLevel)+'%';
+  pileBar.style.background=pileLevel>70?'#E24B4A':pileLevel>40?'#EF9F27':'#1D9E75';
+}
+
+function endGame(){
+  running=false;clearTimeout(spawnTimer);clearInterval(pileTimer);
+  items.forEach(i=>i.el&&i.el.remove());items=[];
+  sfxGameOver();
+  goTitle.textContent=lives<=0?'OUT OF LIVES!':'BURIED!!';
+  goMsg.textContent='SCORE: '+score+'  LVL '+level+' REACHED';
+  setTimeout(()=>{gameOverScreen.style.display='flex';},700);
+}
+
+document.getElementById('start-btn').onclick=startGame;
+document.getElementById('restart-btn').onclick=startGame;
+</script>
+</body>
+</html>
